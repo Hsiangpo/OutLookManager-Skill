@@ -1,0 +1,69 @@
+---
+name: outlook-manager
+description: Use when managing the OutLook Manager account pool (outlook-manager.gpteamservices.com): account CRUD, batch import, acquire/release accounts for signup workers, health checks, purging expired/banned accounts, API key management, or any Outlook account-pool administration.
+---
+
+# OutLook Manager Skill
+
+Manage the OutLook Manager account pool via the bundled CLI. Do not use ad hoc `curl`.
+
+## Setup
+
+1. Copy `references/env.example` to `.env` in this skill directory and fill credentials:
+   - `OUTLOOK_MANAGER_API_KEY` — caller key (om_...), for acquire/release/status commands. Created by admin in the Web UI `/keys` page.
+   - `OUTLOOK_MANAGER_ADMIN_JWT` — admin JWT, for import/check/purge/keys/accounts commands. Get it via `scripts/outlook_manager.py login --password <admin_password> --show-secrets`. Valid 168 hours.
+2. `chmod 600 .env`. The `.env` is gitignored; never commit credentials.
+3. Shell environment variables take precedence over `.env` (useful for switching between prod/test).
+
+## Workflow
+
+1. Read first: `stats`, `accounts list --status fresh`, `accounts get <id>`.
+2. Writes: destructive commands (`accounts delete`, `purge-expired`, `keys revoke`) print a dry-run with a `confirm` phrase; re-run with `--apply --confirm <phrase>` to execute.
+3. Verify after writes: re-list or check `stats`.
+
+## Commands
+
+```bash
+SKILL=.claude/skills/outlook-manager   # or .agents/skills/outlook-manager
+
+# Auth
+python3 $SKILL/scripts/outlook_manager.py login --password <pwd> --show-secrets
+
+# Read
+python3 $SKILL/scripts/outlook_manager.py stats
+python3 $SKILL/scripts/outlook_manager.py accounts list --status fresh
+python3 $SKILL/scripts/outlook_manager.py accounts list --search alice --json
+python3 $SKILL/scripts/outlook_manager.py accounts get <uuid>
+
+# Import (admin)
+python3 $SKILL/scripts/outlook_manager.py import /path/to/pool.txt --source OutlookRegister
+
+# Caller flow (API key)
+python3 $SKILL/scripts/outlook_manager.py acquire --count 2
+python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --show-secrets   # full refresh_token
+python3 $SKILL/scripts/outlook_manager.py release <uuid> --status fresh
+python3 $SKILL/scripts/outlook_manager.py status <uuid> banned --notes "GPT signup banned"
+python3 $SKILL/scripts/outlook_manager.py status-batch banned --ids uuid1,uuid2,uuid3
+
+# Health (admin)
+python3 $SKILL/scripts/outlook_manager.py check <uuid>
+python3 $SKILL/scripts/outlook_manager.py check-batch --statuses fresh,in_use --limit 50
+
+# Destructive (dry-run first, then --apply --confirm)
+python3 $SKILL/scripts/outlook_manager.py accounts delete <uuid>
+python3 $SKILL/scripts/outlook_manager.py accounts delete <uuid> --apply --confirm DELETE:<uuid>
+python3 $SKILL/scripts/outlook_manager.py purge-expired
+python3 $SKILL/scripts/outlook_manager.py purge-expired --apply --confirm PURGE:expired:12
+python3 $SKILL/scripts/outlook_manager.py purge-expired --include-banned
+python3 $SKILL/scripts/outlook_manager.py keys list
+python3 $SKILL/scripts/outlook_manager.py keys revoke <uuid>
+
+# Raw escape hatch is intentionally absent: use the documented commands only.
+```
+
+## Safety Notes
+
+- Output is redacted by default (refresh_token / API keys / JWTs truncated). Use `--show-secrets` only on a local operator machine; never paste that output into chat, docs, commits, or tickets.
+- `acquire` returns `{"ok": false, "error": "无可用账号"}` when the pool is empty (server is HTTP 404).
+- Accounts left in `in_use` are auto-recycled to `fresh` after 30 minutes by the server.
+- Server auto health-checks hourly; failed checks mark accounts `expired`.
