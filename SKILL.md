@@ -38,9 +38,10 @@ python3 $SKILL/scripts/outlook_manager.py accounts get <uuid>
 python3 $SKILL/scripts/outlook_manager.py import /path/to/pool.txt --source OutlookRegister
 
 # Caller flow (API key)
-python3 $SKILL/scripts/outlook_manager.py acquire --count 2
-python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose gpt      # 排除GPT已用，取出后标记gpt_used
+python3 $SKILL/scripts/outlook_manager.py acquire --count 2 --purpose other
+python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose gpt      # 排除GPT已用，取出后标记gpt_used（必传purpose）
 python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose claude   # 排除Claude已用
+python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose sale     # 只能卖干净号(未被GPT/Claude用过)
 python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --show-secrets   # full refresh_token
 python3 $SKILL/scripts/outlook_manager.py release <uuid> --status fresh
 python3 $SKILL/scripts/outlook_manager.py status <uuid> banned --notes "GPT signup banned"
@@ -71,5 +72,5 @@ python3 $SKILL/scripts/outlook_manager.py keys revoke <uuid>
 
 - Output is redacted by default (refresh_token / API keys / JWTs truncated). Use `--show-secrets` only on a local operator machine; never paste that output into chat, docs, commits, or tickets.
 - `acquire` returns `{"ok": false, "error": "无可用账号"}` when the pool is empty (server is HTTP 404).
-- Accounts left in `in_use` are auto-recycled to `fresh` after 30 minutes by the server.
+- Accounts left in `in_use` are auto-recycled to `fresh` after 5 minutes by the server.
 - Server auto health-checks hourly; failed checks mark accounts `expired`.
