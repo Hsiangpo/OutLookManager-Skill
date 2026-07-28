@@ -1,6 +1,6 @@
 ---
 name: outlook-manager
-description: Use when managing the OutLook Manager account pool (outlook-manager.gpteamservices.com): account CRUD, batch import, acquire/release accounts for signup workers, health checks, purging expired/banned accounts, API key management, or any Outlook account-pool administration.
+description: Use when managing the OutLook Manager account pool (outlook-manager.gpteamservices.com): account CRUD, batch import, acquire accounts for signup workers, health checks, purging expired/banned accounts, API key management, or any Outlook account-pool administration.
 ---
 
 # OutLook Manager Skill
@@ -9,7 +9,7 @@ Manage the OutLook Manager account pool via the bundled CLI. Do not use ad hoc `
 
 ## Setup
 
-1. Copy `references/env.example` to `.env` in this skill directory and fill `OUTLOOK_MANAGER_API_KEY` — an `om_` key created in the Web UI `/keys` page. One key covers every command (acquire/release/status/import/check/purge/keys/stats).
+1. Copy `references/env.example` to `.env` in this skill directory and fill `OUTLOOK_MANAGER_API_KEY` — an `om_` key created in the Web UI `/keys` page. One key covers every command (acquire/status/import/check/purge/keys/stats).
    - `OUTLOOK_MANAGER_ADMIN_JWT` is optional and only needed for Web-console-style workflows; the API key alone is enough.
 2. `chmod 600 .env`. The `.env` is gitignored; never commit credentials.
 3. Shell environment variables take precedence over `.env` (useful for switching between prod/test).
@@ -38,12 +38,12 @@ python3 $SKILL/scripts/outlook_manager.py accounts get <uuid>
 python3 $SKILL/scripts/outlook_manager.py import /path/to/pool.txt --source OutlookRegister
 
 # Caller flow (API key)
+# 取号后无需归还，5分钟自动回收
 python3 $SKILL/scripts/outlook_manager.py acquire --count 2 --purpose other
 python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose gpt      # 排除GPT已用，取出后标记gpt_used（必传purpose）
 python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose claude   # 排除Claude已用
 python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose sale     # 只能卖干净号(未被GPT/Claude用过)
 python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --show-secrets   # full refresh_token
-python3 $SKILL/scripts/outlook_manager.py release <uuid> --status fresh
 python3 $SKILL/scripts/outlook_manager.py status <uuid> banned --notes "GPT signup banned"
 python3 $SKILL/scripts/outlook_manager.py status-batch banned --ids uuid1,uuid2,uuid3
 python3 $SKILL/scripts/outlook_manager.py flags uuid1,uuid2 --gpt true          # 标记GPT已用
