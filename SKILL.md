@@ -39,10 +39,15 @@ python3 $SKILL/scripts/outlook_manager.py import /path/to/pool.txt --source Outl
 
 # Caller flow (API key)
 python3 $SKILL/scripts/outlook_manager.py acquire --count 2
+python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose gpt      # 排除GPT已用，取出后标记gpt_used
+python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --purpose claude   # 排除Claude已用
 python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --show-secrets   # full refresh_token
 python3 $SKILL/scripts/outlook_manager.py release <uuid> --status fresh
 python3 $SKILL/scripts/outlook_manager.py status <uuid> banned --notes "GPT signup banned"
 python3 $SKILL/scripts/outlook_manager.py status-batch banned --ids uuid1,uuid2,uuid3
+python3 $SKILL/scripts/outlook_manager.py flags uuid1,uuid2 --gpt true          # 标记GPT已用
+python3 $SKILL/scripts/outlook_manager.py flags uuid1,uuid2 --sold true         # 标记已出售
+python3 $SKILL/scripts/outlook_manager.py flags uuid1 --claude false            # 取消Claude已用
 python3 $SKILL/scripts/outlook_manager.py delete-batch --ids uuid1,uuid2
 python3 $SKILL/scripts/outlook_manager.py delete-batch --ids uuid1,uuid2 --apply --confirm DELETE-BATCH:2
 
