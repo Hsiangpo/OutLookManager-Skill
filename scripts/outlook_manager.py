@@ -99,25 +99,20 @@ def get_config():
     load_env_file(skill_dir() / ".env")
     return {
         "base_url": os.environ.get("OUTLOOK_MANAGER_BASE_URL", DEFAULT_BASE_URL),
-        "admin_jwt": os.environ.get("OUTLOOK_MANAGER_ADMIN_JWT", ""),  # 可选：Web 会话凭证
+        "admin_jwt": os.environ.get("OUTLOOK_MANAGER_ADMIN_JWT", ""),
         "api_key": os.environ.get("OUTLOOK_MANAGER_API_KEY", ""),
     }
 
 
-def _token(cfg):
-    """统一凭证：API Key 优先（全能），没有则回退管理员 JWT。"""
-    return cfg["api_key"] or cfg["admin_jwt"]
-
-
 def need_admin(cfg):
-    if not _token(cfg):
-        raise CliError("该命令需要凭证：在 .env 填 OUTLOOK_MANAGER_API_KEY（Web /keys 页创建）")
-    return _token(cfg)
+    if not cfg["admin_jwt"]:
+        raise CliError("该命令需要管理员 JWT：在 .env 填 OUTLOOK_MANAGER_ADMIN_JWT（先 login 获取）")
+    return cfg["admin_jwt"]
 
 
 def need_key(cfg):
     if not cfg["api_key"]:
-        raise CliError("该命令需要 API Key：在 .env 填 OUTLOOK_MANAGER_API_KEY（Web /keys 页创建）")
+        raise CliError("该命令需要 API Key：在 .env 填 OUTLOOK_MANAGER_API_KEY（管理员在 Web /keys 创建）")
     return cfg["api_key"]
 
 
@@ -161,7 +156,12 @@ def cmd_accounts_list(client, cfg, args):
     print(f"total={data['total']} page={data['page']}/{-(-data['total']//data['page_size'])}")
     for a in data["items"]:
         token_disp = a["refresh_token"][:10] + "…" if a["refresh_token"] else "-"
-        print(f'{a["id"]}  {a["email"]:<38} {a["status"]:<9} rt={token_disp:<12} checked={a["last_checked_at"] or "-"}')
+        flags = []
+        if a.get("gpt_used"): flags.append("G")
+        if a.get("claude_used"): flags.append("C")
+        if a.get("sold"): flags.append("S")
+        flag_str = "".join(flags) or "-"
+        print(f'{a["id"]}  {a["email"]:<38} {a["status"]:<9} [{flag_str}]  rt={token_disp:<12} checked={a["last_checked_at"] or "-"}')
 
 
 def cmd_accounts_get(client, cfg, args):
@@ -229,9 +229,9 @@ def cmd_import(client, cfg, args):
 
 
 def cmd_acquire(client, cfg, args):
+    payload = {"count": args.count, "purpose": args.purpose}
     status, data = client.request(
-        "POST", "/accounts/acquire", token=need_key(cfg),
-        payload={"count": args.count, "prefer_verified": args.prefer_verified, "purpose": args.purpose})
+        "POST", "/accounts/acquire", token=need_key(cfg), payload=payload)
     if status == 404:
         print_json({"ok": False, "error": "无可用账号", "accounts": []}, args.show_secrets)
         return
@@ -240,8 +240,9 @@ def cmd_acquire(client, cfg, args):
 
 
 def cmd_release(client, cfg, args):
+    """还号 -- release 接口已废弃，用 PATCH /status 替代。"""
     status, data = client.request(
-        "POST", f"/accounts/{args.id}/release", token=need_key(cfg),
+        "PATCH", f"/accounts/{args.id}/status", token=need_key(cfg),
         payload={"status": args.status})
     check(status, data)
     print_json({"applied": True, "id": args.id, "status": args.status}, args.show_secrets)
@@ -263,56 +264,9 @@ def cmd_status_batch(client, cfg, args):
     print_json(check(status, data), args.show_secrets)
 
 
-def cmd_delete_batch(client, cfg, args):
-    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
-    expected = f"DELETE-BATCH:{len(ids)}"
-    if not args.apply:
-        print_json({"dry_run": True, "action": "delete-batch", "count": len(ids), "confirm": expected}, args.show_secrets)
-        return
-    if args.confirm != expected:
-        raise CliError(f"确认短语不匹配，需要: {expected}")
-    status, data = client.request("POST", "/accounts/delete-batch", token=need_admin(cfg),
-                                  payload={"ids": ids})
-    print_json(check(status, data), args.show_secrets)
-
-
-def cmd_flags(client, cfg, args):
-    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
-    flags = {}
-    if args.gpt is not None: flags["gpt_used"] = args.gpt
-    if args.claude is not None: flags["claude_used"] = args.claude
-    if args.sold is not None: flags["sold"] = args.sold
-    if not flags:
-        raise CliError("至少指定一个 --gpt/--claude/--sold")
-    status, data = client.request("POST", "/accounts/flags-batch", token=need_admin(cfg),
-                                  payload={"ids": ids, **flags})
-    print_json(check(status, data), args.show_secrets)
-
-
 def cmd_check(client, cfg, args):
     status, data = client.request("POST", f"/accounts/{args.id}/check", token=need_admin(cfg))
     print_json(check(status, data), args.show_secrets)
-
-
-def cmd_test_imap(client, cfg, args):
-    status, data = client.request("POST", f"/accounts/{args.id}/test-imap", token=need_admin(cfg))
-    print_json(check(status, data), args.show_secrets)
-
-
-def cmd_history(client, cfg, args):
-    status, data = client.request("GET", f"/accounts/{args.id}/history?limit={args.limit}", token=need_admin(cfg))
-    check(status, data)
-    for h in data:
-        print(f'{h["action"]:<12} {h["status"]:<6} {h["detail"][:40]:<40} {h["created_at"][:19]}')
-
-
-def cmd_job(client, cfg, args):
-    if args.sub == "status":
-        status, data = client.request("GET", f"/jobs/{args.task_id}", token=need_admin(cfg))
-        print_json(check(status, data), args.show_secrets)
-    elif args.sub == "cancel":
-        status, data = client.request("POST", f"/jobs/{args.task_id}/cancel", token=need_admin(cfg))
-        print_json(check(status, data), args.show_secrets)
 
 
 def cmd_check_batch(client, cfg, args):
@@ -320,6 +274,54 @@ def cmd_check_batch(client, cfg, args):
     status, data = client.request(
         "POST", "/accounts/check-batch", token=need_admin(cfg),
         payload={"filter_status": statuses, "limit": args.limit})
+    print_json(check(status, data), args.show_secrets)
+
+
+def cmd_flags(client, cfg, args):
+    """设置单账号用途标记 gpt_used/claude_used/sold。"""
+    payload = {}
+    if args.gpt_used is not None:
+        payload["gpt_used"] = args.gpt_used
+    if args.claude_used is not None:
+        payload["claude_used"] = args.claude_used
+    if args.sold is not None:
+        payload["sold"] = args.sold
+    if not payload:
+        raise CliError("至少指定一个标记：--gpt-used/--claude-used/--sold")
+    status, data = client.request(
+        "PATCH", f"/accounts/{args.id}/flags", token=need_key(cfg), payload=payload)
+    check(status, data, expect=(200, 204))
+    print_json({"applied": True, "id": args.id, **payload}, args.show_secrets)
+
+
+def cmd_flags_batch(client, cfg, args):
+    """批量设置用途标记。"""
+    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+    payload = {"ids": ids}
+    if args.gpt_used is not None:
+        payload["gpt_used"] = args.gpt_used
+    if args.claude_used is not None:
+        payload["claude_used"] = args.claude_used
+    if args.sold is not None:
+        payload["sold"] = args.sold
+    status, data = client.request(
+        "POST", "/accounts/flags-batch", token=need_key(cfg), payload=payload)
+    print_json(check(status, data), args.show_secrets)
+
+
+def cmd_delete_batch(client, cfg, args):
+    """批量删除账号（物理删除，不可恢复）。"""
+    jwt = need_admin(cfg)
+    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+    expected = f"DELETE-BATCH:{len(ids)}"
+    if not args.apply:
+        print_json({"dry_run": True, "action": "delete-batch", "count": len(ids),
+                    "confirm": expected}, args.show_secrets)
+        return
+    if args.confirm != expected:
+        raise CliError(f"确认短语不匹配，需要: {expected}")
+    status, data = client.request(
+        "POST", "/accounts/delete-batch", token=jwt, payload={"ids": ids})
     print_json(check(status, data), args.show_secrets)
 
 
@@ -405,12 +407,12 @@ def build_parser():
 
     p = sub.add_parser("acquire", help="取号")
     p.add_argument("--count", type=int, default=1)
-    p.add_argument("--prefer-verified", action="store_true")
-    p.add_argument("--purpose", default="other", choices=["gpt","claude","other"], help="gpt=排除GPT已用, claude=排除Claude已用")
+    p.add_argument("--purpose", required=True, choices=["gpt", "claude", "sale", "other"],
+                   help="必传。gpt=排除GPT已用+标记；claude=排除Claude已用+标记；sale=只卖干净号+标记已售；other=不排除不标记")
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_acquire)
 
-    p = sub.add_parser("release", help="还号")
+    p = sub.add_parser("release", help="还号（用 PATCH /status 实现）")
     p.add_argument("id")
     p.add_argument("--status", default="fresh", choices=["fresh", "banned", "locked", "expired"])
     p.add_argument("--show-secrets", action="store_true")
@@ -418,55 +420,53 @@ def build_parser():
 
     p = sub.add_parser("status", help="上报单账号状态")
     p.add_argument("id")
-    p.add_argument("status", choices=["fresh", "verified", "banned", "locked", "expired"])
+    p.add_argument("status", choices=["fresh", "banned", "locked", "expired"])
     p.add_argument("--notes", default="")
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_status)
 
     p = sub.add_parser("status-batch", help="批量上报状态")
-    p.add_argument("status", choices=["fresh", "verified", "banned", "locked", "expired"])
+    p.add_argument("status", choices=["fresh", "banned", "locked", "expired"])
     p.add_argument("--ids", required=True, help="逗号分隔的账号 ID")
     p.add_argument("--notes", default="")
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_status_batch)
 
-    p = sub.add_parser("delete-batch", help="批量删除账号")
-    p.add_argument("ids", help="逗号分隔的账号 ID")
+    p = sub.add_parser("flags", help="设置用途标记 gpt_used/claude_used/sold")
+    p.add_argument("id")
+    p.add_argument("--gpt-used", dest="gpt_used", action="store_true", default=None)
+    p.add_argument("--no-gpt-used", dest="gpt_used", action="store_false")
+    p.add_argument("--claude-used", dest="claude_used", action="store_true", default=None)
+    p.add_argument("--no-claude-used", dest="claude_used", action="store_false")
+    p.add_argument("--sold", dest="sold", action="store_true", default=None)
+    p.add_argument("--no-sold", dest="sold", action="store_false")
+    p.add_argument("--show-secrets", action="store_true")
+    p.set_defaults(func=cmd_flags)
+
+    p = sub.add_parser("flags-batch", help="批量设置用途标记")
+    p.add_argument("--ids", required=True, help="逗号分隔的账号 ID")
+    p.add_argument("--gpt-used", dest="gpt_used", action="store_true", default=None)
+    p.add_argument("--no-gpt-used", dest="gpt_used", action="store_false")
+    p.add_argument("--claude-used", dest="claude_used", action="store_true", default=None)
+    p.add_argument("--no-claude-used", dest="claude_used", action="store_false")
+    p.add_argument("--sold", dest="sold", action="store_true", default=None)
+    p.add_argument("--no-sold", dest="sold", action="store_false")
+    p.add_argument("--show-secrets", action="store_true")
+    p.set_defaults(func=cmd_flags_batch)
+
+    p = sub.add_parser("delete-batch", help="批量删除账号（物理删除）")
+    p.add_argument("--ids", required=True, help="逗号分隔的账号 ID")
     add_apply(p)
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_delete_batch)
-
-    p = sub.add_parser("flags", help="批量设置用途标记")
-    p.add_argument("ids", help="逗号分隔的账号 ID")
-    p.add_argument("--gpt", choices=["true","false"], help="标记/取消 GPT 已用")
-    p.add_argument("--claude", choices=["true","false"], help="标记/取消 Claude 已用")
-    p.add_argument("--sold", choices=["true","false"], help="标记/取消 已出售")
-    p.add_argument("--show-secrets", action="store_true")
-    p.set_defaults(func=cmd_flags)
 
     p = sub.add_parser("check", help="单账号测活")
     p.add_argument("id")
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_check)
 
-    p = sub.add_parser("test-imap", help="IMAP 协议测试（验证能否读邮件）")
-    p.add_argument("id")
-    p.add_argument("--show-secrets", action="store_true")
-    p.set_defaults(func=cmd_test_imap)
-
-    p = sub.add_parser("history", help="查账号操作历史")
-    p.add_argument("id")
-    p.add_argument("--limit", type=int, default=50)
-    p.add_argument("--show-secrets", action="store_true")
-    p.set_defaults(func=cmd_history)
-
-    p = sub.add_parser("job", help="异步任务管理")
-    j_sub = p.add_subparsers(dest="sub", required=True)
-    js = j_sub.add_parser("status"); js.add_argument("task_id"); js.add_argument("--show-secrets", action="store_true"); js.set_defaults(func=cmd_job)
-    jc = j_sub.add_parser("cancel"); jc.add_argument("task_id"); jc.set_defaults(func=cmd_job)
-
-    p = sub.add_parser("check-batch", help="批量测活（异步，返回 task_id）")
-    p.add_argument("--statuses", default="fresh,in_use,verified")
+    p = sub.add_parser("check-batch", help="批量测活")
+    p.add_argument("--statuses", default="fresh,in_use")
     p.add_argument("--limit", type=int, default=100)
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_check_batch)
