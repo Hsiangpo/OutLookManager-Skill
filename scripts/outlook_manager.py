@@ -294,6 +294,27 @@ def cmd_check(client, cfg, args):
     print_json(check(status, data), args.show_secrets)
 
 
+def cmd_test_imap(client, cfg, args):
+    status, data = client.request("POST", f"/accounts/{args.id}/test-imap", token=need_admin(cfg))
+    print_json(check(status, data), args.show_secrets)
+
+
+def cmd_history(client, cfg, args):
+    status, data = client.request("GET", f"/accounts/{args.id}/history?limit={args.limit}", token=need_admin(cfg))
+    check(status, data)
+    for h in data:
+        print(f'{h["action"]:<12} {h["status"]:<6} {h["detail"][:40]:<40} {h["created_at"][:19]}')
+
+
+def cmd_job(client, cfg, args):
+    if args.sub == "status":
+        status, data = client.request("GET", f"/jobs/{args.task_id}", token=need_admin(cfg))
+        print_json(check(status, data), args.show_secrets)
+    elif args.sub == "cancel":
+        status, data = client.request("POST", f"/jobs/{args.task_id}/cancel", token=need_admin(cfg))
+        print_json(check(status, data), args.show_secrets)
+
+
 def cmd_check_batch(client, cfg, args):
     statuses = [s.strip() for s in args.statuses.split(",") if s.strip()]
     status, data = client.request(
@@ -428,7 +449,23 @@ def build_parser():
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_check)
 
-    p = sub.add_parser("check-batch", help="批量测活")
+    p = sub.add_parser("test-imap", help="IMAP 协议测试（验证能否读邮件）")
+    p.add_argument("id")
+    p.add_argument("--show-secrets", action="store_true")
+    p.set_defaults(func=cmd_test_imap)
+
+    p = sub.add_parser("history", help="查账号操作历史")
+    p.add_argument("id")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--show-secrets", action="store_true")
+    p.set_defaults(func=cmd_history)
+
+    p = sub.add_parser("job", help="异步任务管理")
+    j_sub = p.add_subparsers(dest="sub", required=True)
+    js = j_sub.add_parser("status"); js.add_argument("task_id"); js.add_argument("--show-secrets", action="store_true"); js.set_defaults(func=cmd_job)
+    jc = j_sub.add_parser("cancel"); jc.add_argument("task_id"); jc.set_defaults(func=cmd_job)
+
+    p = sub.add_parser("check-batch", help="批量测活（异步，返回 task_id）")
     p.add_argument("--statuses", default="fresh,in_use,verified")
     p.add_argument("--limit", type=int, default=100)
     p.add_argument("--show-secrets", action="store_true")
