@@ -263,6 +263,19 @@ def cmd_status_batch(client, cfg, args):
     print_json(check(status, data), args.show_secrets)
 
 
+def cmd_delete_batch(client, cfg, args):
+    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+    expected = f"DELETE-BATCH:{len(ids)}"
+    if not args.apply:
+        print_json({"dry_run": True, "action": "delete-batch", "count": len(ids), "confirm": expected}, args.show_secrets)
+        return
+    if args.confirm != expected:
+        raise CliError(f"确认短语不匹配，需要: {expected}")
+    status, data = client.request("POST", "/accounts/delete-batch", token=need_admin(cfg),
+                                  payload={"ids": ids})
+    print_json(check(status, data), args.show_secrets)
+
+
 def cmd_check(client, cfg, args):
     status, data = client.request("POST", f"/accounts/{args.id}/check", token=need_admin(cfg))
     print_json(check(status, data), args.show_secrets)
@@ -381,6 +394,12 @@ def build_parser():
     p.add_argument("--notes", default="")
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_status_batch)
+
+    p = sub.add_parser("delete-batch", help="批量删除账号")
+    p.add_argument("ids", help="逗号分隔的账号 ID")
+    add_apply(p)
+    p.add_argument("--show-secrets", action="store_true")
+    p.set_defaults(func=cmd_delete_batch)
 
     p = sub.add_parser("check", help="单账号测活")
     p.add_argument("id")

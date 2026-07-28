@@ -43,6 +43,8 @@ python3 $SKILL/scripts/outlook_manager.py acquire --count 1 --show-secrets   # f
 python3 $SKILL/scripts/outlook_manager.py release <uuid> --status fresh
 python3 $SKILL/scripts/outlook_manager.py status <uuid> banned --notes "GPT signup banned"
 python3 $SKILL/scripts/outlook_manager.py status-batch banned --ids uuid1,uuid2,uuid3
+python3 $SKILL/scripts/outlook_manager.py delete-batch --ids uuid1,uuid2
+python3 $SKILL/scripts/outlook_manager.py delete-batch --ids uuid1,uuid2 --apply --confirm DELETE-BATCH:2
 
 # Health (admin)
 python3 $SKILL/scripts/outlook_manager.py check <uuid>
