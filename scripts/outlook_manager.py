@@ -99,20 +99,25 @@ def get_config():
     load_env_file(skill_dir() / ".env")
     return {
         "base_url": os.environ.get("OUTLOOK_MANAGER_BASE_URL", DEFAULT_BASE_URL),
-        "admin_jwt": os.environ.get("OUTLOOK_MANAGER_ADMIN_JWT", ""),
+        "admin_jwt": os.environ.get("OUTLOOK_MANAGER_ADMIN_JWT", ""),  # 可选：Web 会话凭证
         "api_key": os.environ.get("OUTLOOK_MANAGER_API_KEY", ""),
     }
 
 
+def _token(cfg):
+    """统一凭证：API Key 优先（全能），没有则回退管理员 JWT。"""
+    return cfg["api_key"] or cfg["admin_jwt"]
+
+
 def need_admin(cfg):
-    if not cfg["admin_jwt"]:
-        raise CliError("该命令需要管理员 JWT：在 .env 填 OUTLOOK_MANAGER_ADMIN_JWT（先 login 获取）")
-    return cfg["admin_jwt"]
+    if not _token(cfg):
+        raise CliError("该命令需要凭证：在 .env 填 OUTLOOK_MANAGER_API_KEY（Web /keys 页创建）")
+    return _token(cfg)
 
 
 def need_key(cfg):
     if not cfg["api_key"]:
-        raise CliError("该命令需要 API Key：在 .env 填 OUTLOOK_MANAGER_API_KEY（管理员在 Web /keys 创建）")
+        raise CliError("该命令需要 API Key：在 .env 填 OUTLOOK_MANAGER_API_KEY（Web /keys 页创建）")
     return cfg["api_key"]
 
 

@@ -9,9 +9,8 @@ Manage the OutLook Manager account pool via the bundled CLI. Do not use ad hoc `
 
 ## Setup
 
-1. Copy `references/env.example` to `.env` in this skill directory and fill credentials:
-   - `OUTLOOK_MANAGER_API_KEY` — caller key (om_...), for acquire/release/status commands. Created by admin in the Web UI `/keys` page.
-   - `OUTLOOK_MANAGER_ADMIN_JWT` — admin JWT, for import/check/purge/keys/accounts commands. Get it via `scripts/outlook_manager.py login --password <admin_password> --show-secrets`. Valid 168 hours.
+1. Copy `references/env.example` to `.env` in this skill directory and fill `OUTLOOK_MANAGER_API_KEY` — an `om_` key created in the Web UI `/keys` page. One key covers every command (acquire/release/status/import/check/purge/keys/stats).
+   - `OUTLOOK_MANAGER_ADMIN_JWT` is optional and only needed for Web-console-style workflows; the API key alone is enough.
 2. `chmod 600 .env`. The `.env` is gitignored; never commit credentials.
 3. Shell environment variables take precedence over `.env` (useful for switching between prod/test).
 
@@ -26,7 +25,7 @@ Manage the OutLook Manager account pool via the bundled CLI. Do not use ad hoc `
 ```bash
 SKILL=.claude/skills/outlook-manager   # or .agents/skills/outlook-manager
 
-# Auth
+# Auth（可选：仅需要管理员 JWT 的场景；平时一个 API Key 就够）
 python3 $SKILL/scripts/outlook_manager.py login --password <pwd> --show-secrets
 
 # Read

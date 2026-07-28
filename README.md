@@ -17,7 +17,7 @@ git clone https://github.com/Hsiangpo/OutLookManager-Skill .agents/skills/outloo
 cd .claude/skills/outlook-manager
 cp references/env.example .env
 chmod 600 .env
-# 编辑 .env 填入 OUTLOOK_MANAGER_API_KEY（调用方）和/或 OUTLOOK_MANAGER_ADMIN_JWT（管理员）
+# 编辑 .env 填入 OUTLOOK_MANAGER_API_KEY（om_ 前缀，全能凭证，Web /keys 页创建）
 ```
 
 ## 用法
