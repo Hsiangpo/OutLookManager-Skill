@@ -231,7 +231,7 @@ def cmd_import(client, cfg, args):
 def cmd_acquire(client, cfg, args):
     status, data = client.request(
         "POST", "/accounts/acquire", token=need_key(cfg),
-        payload={"count": args.count, "prefer_verified": args.prefer_verified})
+        payload={"count": args.count, "prefer_verified": args.prefer_verified, "purpose": args.purpose})
     if status == 404:
         print_json({"ok": False, "error": "无可用账号", "accounts": []}, args.show_secrets)
         return
@@ -273,6 +273,19 @@ def cmd_delete_batch(client, cfg, args):
         raise CliError(f"确认短语不匹配，需要: {expected}")
     status, data = client.request("POST", "/accounts/delete-batch", token=need_admin(cfg),
                                   payload={"ids": ids})
+    print_json(check(status, data), args.show_secrets)
+
+
+def cmd_flags(client, cfg, args):
+    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+    flags = {}
+    if args.gpt is not None: flags["gpt_used"] = args.gpt
+    if args.claude is not None: flags["claude_used"] = args.claude
+    if args.sold is not None: flags["sold"] = args.sold
+    if not flags:
+        raise CliError("至少指定一个 --gpt/--claude/--sold")
+    status, data = client.request("POST", "/accounts/flags-batch", token=need_admin(cfg),
+                                  payload={"ids": ids, **flags})
     print_json(check(status, data), args.show_secrets)
 
 
@@ -372,6 +385,7 @@ def build_parser():
     p = sub.add_parser("acquire", help="取号")
     p.add_argument("--count", type=int, default=1)
     p.add_argument("--prefer-verified", action="store_true")
+    p.add_argument("--purpose", default="other", choices=["gpt","claude","other"], help="gpt=排除GPT已用, claude=排除Claude已用")
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_acquire)
 
@@ -400,6 +414,14 @@ def build_parser():
     add_apply(p)
     p.add_argument("--show-secrets", action="store_true")
     p.set_defaults(func=cmd_delete_batch)
+
+    p = sub.add_parser("flags", help="批量设置用途标记")
+    p.add_argument("ids", help="逗号分隔的账号 ID")
+    p.add_argument("--gpt", choices=["true","false"], help="标记/取消 GPT 已用")
+    p.add_argument("--claude", choices=["true","false"], help="标记/取消 Claude 已用")
+    p.add_argument("--sold", choices=["true","false"], help="标记/取消 已出售")
+    p.add_argument("--show-secrets", action="store_true")
+    p.set_defaults(func=cmd_flags)
 
     p = sub.add_parser("check", help="单账号测活")
     p.add_argument("id")
